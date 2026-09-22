@@ -156,3 +156,45 @@ week
 # verbs
 drive
 write
+
+## feelings wheel pass (Sparrow + Cody, 2026-09-22)
+# happy
+content
+excited
+hopeful
+proud
+playful
+# sad
+lonely
+hurt
+empty
+grief
+# angry
+frustrated
+annoyed
+# scared
+anxious
+nervous
+overwhelmed
+# surprised
+curious
+confused
+# low
+bored
+numb
+stuck
+# held
+peaceful
+held
+
+## states, which are not feelings (the supervisor is right) (2026-09-22)
+overload
+shutdown
+spoons
+stimming
+reflecting
+processing
+grounded
+regulating
+not ready
+still here
