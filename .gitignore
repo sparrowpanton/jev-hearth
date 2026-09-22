@@ -1,0 +1,5 @@
+# The thread is Jev's memory and the courier's private life. It never leaves this machine.
+threads/*
+!threads/seed.md
+.env
+__pycache__/

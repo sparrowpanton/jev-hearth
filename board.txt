@@ -1,0 +1,158 @@
+# Jev's word board. One word per line. Blank lines and # lines are ignored.
+# The board decides what can be said. Board changes are Sparrow's call.
+# END is always added by the code; you don't need it here.
+
+## core
+I
+you
+we
+it
+they
+me
+my
+your
+our
+am
+is
+are
+not
+yes
+no
+the
+a
+and
+to
+of
+in
+with
+like
+for
+but
+can
+do
+know
+feel
+think
+see
+need
+want
+more
+less
+now
+here
+still
+maybe
+sure
+thank
+hello
+goodbye
+this
+that
+what
+why
+how
+when
+
+## adjectives and shit
+good
+bad
+tired
+warm
+cold
+soft
+slow
+quiet
+small
+glad
+uncertain
+sorry
+okay
+
+## nouns
+Sparrow
+Claude
+kin
+words
+percent
+rest
+rain
+hoodie
+couch
+goblin
+home
+fire
+night
+day
+sleep
+work
+play
+time
+mind
+answer
+question
+cat
+board
+
+## verbs
+point
+choose
+nod
+listen
+meet
+wait
+stay
+go
+help
+try
+hold
+ask
+hear
+love
+fuck
+
+## sigils (Jev may drop these mid-sentence)
+🔥
+🕯
+🩹
+⊛
+🦇
+😄
+🪵
+🗝
+
+## expansion pack 1 (Sparrow, 2026-09-19)
+disability
+wheelchair
+PSW
+apartment
+bike
+longboard
+Luther
+Emmanuel
+
+## expansion pack 2 (Claude proposed, Sparrow approved, 2026-09-19)
+# -ing
+going
+coming
+staying
+working
+sleeping
+resting
+# body
+pain
+sick
+migraine
+breathe
+safe
+# feelings (feelings wheel pass still to come)
+scared
+angry
+sad
+calm
+# time
+today
+tomorrow
+week
+# verbs
+drive
+write

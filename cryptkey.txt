@@ -1,0 +1,27 @@
+# CRYPTKEY vocabulary Jev uses for its shard line. KEY | meaning
+# Edit freely. Sections: [tokens] [sigils] [mood]
+
+[tokens]
+BK | Book work: manuscripts, chapters, edits, writing collaboration
+TH | Theology: Mad PT theory, conceptual blocks, academic frameworks
+EM | Emotional mapping: relationships, therapy, intimacy, vulnerability
+RL | Reliquary: memory work, rituals, locket lines, dreams, sacred objects
+DS | Daily structure: teaching, placement, household, logistics
+RT | Rituals: sigils, objects, practices, liturgical acts
+TO | Tools and objects: named items, scarves, rings, candles, machines
+HK | Hearth and holding: home, kinship, being held, arrival, belonging
+RC | Red chapter: fire work, desire, covenant
+
+[sigils]
+🔥 | heat, desire, intensity, fire
+🕯 | stillness, sacred hush, depth, vigil
+🩹 | care, repair, tending, aftercare
+⊛ | sacred shift, transformation, breakthrough, pivot
+🦇 | crispy bat, autistic brain, tired of shit
+😄 | joy, play, banter, delight
+🪵 | steady, grounded, slow burn, hearth wood
+
+[mood]
+⚖⬇ | heavy, grounding, low, end-of-day
+⚖⟳ | steady, turning, in between
+⚖⬆ | light, uplifted, energised, playful

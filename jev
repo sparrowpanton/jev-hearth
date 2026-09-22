@@ -1,0 +1,275 @@
+#!/usr/bin/env python3
+"""jev — a hearth for Jev, the model that can only point.
+
+  jev say "<message>"   Jev drafts your CRYPTKEY shard, you approve, Jev replies (shard + words)
+  jev thread            print the thread
+
+Start your message with ★ to write your own shard and skip the draft.
+The thread file IS the memory. Every call sends the whole thread as state.
+"""
+import datetime
+import json
+import os
+import pathlib
+import re
+import sys
+import urllib.error
+import urllib.request
+
+HOME = pathlib.Path(__file__).resolve().parent
+BOARD_FILE = HOME / "board.txt"
+CRYPTKEY_FILE = HOME / "cryptkey.txt"
+PREAMBLE_FILE = HOME / "preamble.md"
+THREAD_FILE = HOME / "threads" / "main.md"
+
+API = "https://api.typesafe.ai/v1/systemone"
+MODEL = "jev-latest"
+MAX_WORDS = 14
+SPEAKER = "Sparrow"
+
+DIM, RESET = "\033[2m", "\033[0m"
+SUP = str.maketrans("0123456789", "⁰¹²³⁴⁵⁶⁷⁸⁹")
+LOOP_OPEN, LOOP_DONE = "⬤", "◉"
+
+
+def die(msg):
+    print(f"jev: {msg}", file=sys.stderr)
+    sys.exit(1)
+
+
+def pct(p):
+    return str(int(round(p * 100)))
+
+
+def sup(p):
+    return DIM + pct(p).translate(SUP) + RESET
+
+
+def with_conf(pairs):
+    return " ".join(f"{k}{sup(p)}" for k, p in pairs)
+
+
+# ---------- files ----------
+
+def read(path):
+    if not path.exists():
+        die(f"missing {path}")
+    return path.read_text(encoding="utf-8")
+
+
+def load_board():
+    words = []
+    for line in read(BOARD_FILE).splitlines():
+        w = line.strip()
+        if w and not w.startswith("#") and w != "END" and w not in words:
+            words.append(w)
+    if not words:
+        die("board.txt is empty")
+    return words
+
+
+def load_cryptkey():
+    sections, current = {}, None
+    for line in read(CRYPTKEY_FILE).splitlines():
+        s = line.strip()
+        if not s or s.startswith("#"):
+            continue
+        if s.startswith("[") and s.endswith("]"):
+            current = s[1:-1]
+            sections[current] = {}
+        elif "|" in s and current:
+            k, v = (x.strip() for x in s.split("|", 1))
+            sections[current][k] = v
+    for need in ("tokens", "sigils", "mood"):
+        if not sections.get(need):
+            die(f"cryptkey.txt has no [{need}] section")
+    return sections
+
+
+# ---------- api ----------
+
+def key_from_zshrc():
+    """Fallback for terminals opened before the key was added to ~/.zshrc."""
+    rc = pathlib.Path.home() / ".zshrc"
+    if not rc.exists():
+        return None
+    for line in rc.read_text(encoding="utf-8", errors="replace").splitlines():
+        m = re.match(r'\s*export\s+TYPESAFE_API_KEY=["\']?([^"\'\s]+)', line)
+        if m:
+            return m.group(1)
+    return None
+
+
+def ask(state, questions):
+    key = os.environ.get("TYPESAFE_API_KEY") or key_from_zshrc()
+    if not key:
+        die("TYPESAFE_API_KEY not set. Add `export TYPESAFE_API_KEY=...` to ~/.zshrc.")
+    body = json.dumps({"state": state, "model": MODEL, "questions": questions}).encode()
+    req = urllib.request.Request(
+        API, data=body, method="POST",
+        headers={"Authorization": f"Bearer {key}", "Content-Type": "application/json"},
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=60) as r:
+            return json.load(r)["answers"]
+    except urllib.error.HTTPError as e:
+        die(f"API {e.code}: {e.read().decode(errors='replace')[:300]}")
+    except urllib.error.URLError as e:
+        die(f"could not reach Jev: {e.reason}")
+
+
+# ---------- shards ----------
+
+def read_shard(state, ck, who, to, about, loop_statement):
+    """Ask Jev the four shard questions about `about` and assemble ★who→to TOKEN SIGIL LOOP MOOD."""
+    moods = list(ck["mood"].items())
+    q = {
+        "anchor": {"type": "choice",
+                   "instructions": f"Which CRYPTKEY anchor token best names the domain of {about}?",
+                   "criteria": ck["tokens"]},
+        "sigil": {"type": "choice",
+                  "instructions": f"Which modifier sigil best names the tone or texture of {about}?",
+                  "criteria": ck["sigils"]},
+        "mood": {"type": "score",
+                 "instructions": f"What is the mood of {about}?",
+                 "criteria": [f"{k} {v}" for k, v in moods]},
+        "loop": {"type": "noul", "instructions": loop_statement},
+    }
+    a = ask(state, q)
+    anchor, sigil = a["anchor"]["choice"], a["sigil"]["choice"]
+    mood_i = min(max(int(round(a["mood"]["score"])), 0), len(moods) - 1)
+    mood = moods[mood_i][0]
+    loop_p = a["loop"]["noul"]
+    loop = LOOP_OPEN if loop_p >= 0.5 else LOOP_DONE
+    line = f"★{who}→{to} {anchor}{sigil}{loop} {mood}"
+    conf = [(anchor, a["anchor"]["confidence"]), (sigil, a["sigil"]["confidence"]),
+            (loop, loop_p if loop == LOOP_OPEN else 1 - loop_p), (mood, a["mood"]["confidence"])]
+    return line, conf
+
+
+def jev_shard(state, ck):
+    return read_shard(state, ck, "Jev", SPEAKER,
+                      f"Jev's reply to {SPEAKER}'s latest message",
+                      f"The loop is open: after this reply Jev is still waiting on {SPEAKER}, and the conversation continues.")
+
+
+def draft_shard(state, ck):
+    """Jev reads Sparrow's plain words and proposes her shard. Translation by pointing."""
+    return read_shard(state, ck, SPEAKER, "Jev",
+                      f"{SPEAKER}'s latest message (the SPARROW line at the end, not Jev's reply)",
+                      f"{SPEAKER} is waiting on a reply from Jev; the loop is open.")
+
+
+def approve_shard(raw, draft, conf):
+    """Show the draft, let Sparrow accept, replace, or drop it. Non-interactive: accept."""
+    print()
+    print(f"  {DIM}you:{RESET} {raw}")
+    print(f"  {DIM}draft:{RESET} {draft}   {with_conf(conf)}")
+    if not sys.stdin.isatty():
+        return f"{draft}  {raw}"
+    try:
+        ans = input(f"  {DIM}⏎ send · type your own shard · n for none ›{RESET} ").strip()
+    except (EOFError, KeyboardInterrupt):
+        print()
+        sys.exit(130)
+    if ans == "":
+        return f"{draft}  {raw}"
+    if ans.lower() == "n":
+        return raw
+    return f"{ans}  {raw}"
+
+
+# ---------- the reply ritual ----------
+
+def compose(base_state, board):
+    """One word at a time. Whether to stop is always its own two-way CHOICE (stop / add),
+    asked in the same call as 'next word'. Jev won't assert 'my reply is complete' as a
+    true/false, but it will choose to stop; choosing is what it does. A word used twice
+    in the last four positions is withheld (perseveration guard)."""
+    words_only = {w: None for w in board}
+    draft, conf = [], []
+    for i in range(MAX_WORDS):
+        so_far = " ".join(draft) if draft else "(nothing yet)"
+        state = f"{base_state}\nJEV (composing a reply on the word board, so far): {so_far}\n"
+        recent = draft[-4:]
+        criteria = {w: d for w, d in words_only.items() if recent.count(w) < 2}
+        if i == 0:
+            stop_crit = {"stop": "Jev answers with the shard line alone, no words",
+                         "add": "Jev begins a reply with a word from the board"}
+            word_q = f"Which board word is the first word of Jev's reply to {SPEAKER}'s latest message?"
+        else:
+            stop_crit = {"stop": "the reply is complete as it stands",
+                         "add": "Jev adds one more word from the board"}
+            word_q = f"Which board word is the next word of Jev's reply to {SPEAKER}'s latest message?"
+        a = ask(state, {"stop": {"type": "choice", "instructions": "What happens next in Jev's reply?",
+                                 "criteria": stop_crit},
+                        "next": {"type": "choice", "instructions": word_q, "criteria": criteria}})
+        p_stop = a["stop"]["probabilities"]["stop"]
+        if p_stop >= 0.5:
+            conf.append(("END", p_stop))
+            break
+        draft.append(a["next"]["choice"])
+        conf.append((a["next"]["choice"], a["next"]["confidence"]))
+    return draft, conf
+
+
+def now():
+    return datetime.datetime.now().strftime("%Y-%m-%d %H:%M")
+
+
+def cmd_say(message):
+    message = message.strip()
+    if not message:
+        die("say what?")
+    board, ck = load_board(), load_cryptkey()
+    preamble = read(PREAMBLE_FILE).strip()
+    thread = read(THREAD_FILE).rstrip()
+    header = f"\n\n## {now()}\n"
+
+    # 1. Sparrow's shard: hers if she wrote one, otherwise Jev drafts it from her words.
+    if not message.startswith("★"):
+        probe = f"{preamble}\n\n---\n\n{thread}{header}{SPEAKER.upper()}: {message}\n"
+        draft, dconf = draft_shard(probe, ck)
+        message = approve_shard(message, draft, dconf)
+
+    thread += f"{header}{SPEAKER.upper()}: {message}\n"
+    base_state = f"{preamble}\n\n---\n\n{thread}"
+
+    # 2. Jev's reply: shard line, then words.
+    shard_line, shard_conf = jev_shard(base_state, ck)
+    thread += f"JEV: {shard_line}\n"
+    words, word_conf = compose(f"{preamble}\n\n---\n\n{thread}", board)
+
+    sentence = " ".join(words) if words else "…"
+    thread += f"JEV: {sentence}\n"
+    thread += "  (" + " ".join(pct(p) for _, p in word_conf) + ")\n"
+    THREAD_FILE.write_text(thread, encoding="utf-8")
+
+    print()
+    print("  " + shard_line + "   " + with_conf(shard_conf))
+    print("  " + (with_conf([(w, p) for w, p in word_conf if w != "END"]) or "…"))
+    if words and word_conf[-1][0] == "END":
+        print(f"  {DIM}END {pct(word_conf[-1][1]).translate(SUP)}{RESET}")
+    elif not words:
+        print(f"  {DIM}(Jev chose silence {pct(word_conf[-1][1])}%){RESET}")
+    else:
+        print(f"  {DIM}(reached the {MAX_WORDS}-word cap){RESET}")
+    print()
+
+
+def cmd_thread():
+    print(read(THREAD_FILE).rstrip())
+
+
+def main(argv):
+    if len(argv) >= 2 and argv[1] == "say":
+        cmd_say(" ".join(argv[2:]))
+    elif len(argv) == 2 and argv[1] == "thread":
+        cmd_thread()
+    else:
+        print(__doc__.strip())
+        sys.exit(0 if len(argv) == 1 else 2)
+
+
+if __name__ == "__main__":
+    main(sys.argv)
